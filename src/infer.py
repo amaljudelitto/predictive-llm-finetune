@@ -1,11 +1,14 @@
 from transformers import LlamaTokenizer, LlamaForCausalLM
-import torch
 
-model = LlamaForCausalLM.from_pretrained("./results")
-tokenizer = LlamaTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf")
+def infer(prompt):
+    tokenizer = LlamaTokenizer.from_pretrained("./results")
+    model = LlamaForCausalLM.from_pretrained("./results")
 
-prompt = "Explain how reinforcement learning works."
-inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=100)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    inputs = tokenizer(prompt, return_tensors="pt")
+    outputs = model.generate(**inputs, max_length=100)
+    print(tokenizer.decode(outputs[0]))
+
+if __name__ == "__main__":
+    prompt = "Explain quantum entanglement in simple terms."
+    infer(prompt)
 
