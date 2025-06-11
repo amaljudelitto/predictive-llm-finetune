@@ -1,49 +1,41 @@
-import torch
-from transformers import LlamaTokenizer, LlamaForCausalLM, TrainingArguments, Trainer, DataCollatorForLanguageModeling
-from datasets import load_dataset
-from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+from transformers import LlamaTokenizer, LlamaForCausalLM, Trainer, TrainingArguments, TextDataset, DataCollatorForLanguageModeling
 import os
 
-model_id = "NousResearch/Llama-2-7b-chat-hf"
-tokenizer = LlamaTokenizer.from_pretrained(model_id)
-model = LlamaForCausalLM.from_pretrained(model_id, load_in_4bit=True, device_map="auto")
+def load_dataset(file_path, tokenizer, block_size=128):
+    return TextDataset(
+        tokenizer=tokenizer,
+        file_path=file_path,
+        block_size=block_size
+    )
 
-peft_config = LoraConfig(
-    task_type=TaskType.CAUSAL_LM,
-    inference_mode=False,
-    r=8,
-    lora_alpha=32,
-    lora_dropout=0.05
-)
-model = prepare_model_for_kbit_training(model)
-model = get_peft_model(model, peft_config)
+def main():
+    model_name = "NousResearch/Llama-2-7b-hf"
+    tokenizer = LlamaTokenizer.from_pretrained(model_name)
+    model = LlamaForCausalLM.from_pretrained(model_name)
 
-dataset = load_dataset("mlabonne/guanaco-cleaned", split="train[:1%]")
+    train_dataset = load_dataset("data/train.txt", tokenizer)
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
-def tokenize(example):
-    return tokenizer(example["text"], truncation=True, padding="max_length", max_length=512)
+    training_args = TrainingArguments(
+        output_dir="./results",
+        overwrite_output_dir=True,
+        num_train_epochs=1,
+        per_device_train_batch_size=1,
+        save_steps=10_000,
+        save_total_limit=2,
+    )
 
-tokenized_dataset = dataset.map(tokenize, batched=True)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        data_collator=data_collator,
+        train_dataset=train_dataset,
+    )
 
-training_args = TrainingArguments(
-    per_device_train_batch_size=1,
-    gradient_accumulation_steps=4,
-    num_train_epochs=1,
-    output_dir="./results",
-    logging_steps=10,
-    save_steps=100,
-    fp16=True,
-    save_total_limit=2,
-    learning_rate=2e-4,
-    warmup_steps=10,
-)
+    trainer.train()
+    trainer.save_model("./results")
+    tokenizer.save_pretrained("./results")
 
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=tokenized_dataset,
-    data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
-)
-
-trainer.train()
+if __name__ == "__main__":
+    main()
 
